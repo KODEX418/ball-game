@@ -1,6 +1,6 @@
 from time import sleep
 from tkinter import *
-from tkinter import ttk, messagebox, font
+from tkinter import messagebox, font
 from random import *
 import math as mh
 import ballsim
@@ -15,16 +15,18 @@ star_png = PhotoImage(file='star.png')
 m = 675
 n = 530
 grid_size = 30
-
+s_y, s_x = 0, 0
+x1, y1 = 0, 0
+angle = 60
 correct_coords = []
 trajectory_ready = False
 player_lose = False
-traj_state = HIDDEN
+traj_state = NORMAL
 player_entry_str = StringVar()
 errmsg = StringVar()
-start_brick_pos, fin_brick_pos = -100, -100
+start_brick_pos, fin_brick_pos = (-100, -100), (-100, -100)
 question_text1 = f'''C какой скоростью V(м/с) должен двигаться объект чтобы достигнуть звездочки?\n'''
-
+star_count = 0
 
 def calc_menu():
     ballsim.main()
@@ -40,15 +42,39 @@ def is_valid(s):
 
 
 def jump_command():
+    global trajectory, trajectory_ready, star_count
     if is_valid(player_entry_str.get()):
-        for k in correct_coords:
-            canvas.moveto(player, *k)
+        if trajectory_ready:
+            canvas.delete(trajectory)
+        print(canvas.coords(win_star))
+        x_0, h = x1, y1
+        v = int(get_user_data())
+        a = angle
+        t = 10
+        coords = calculate_trajectory(h, a, v, x_0, t)
+        for k in coords:
+            if 0 <= k[0] <= n - 32 and k[1] <= m - 32:
+                canvas.moveto(player, *k)
+                canvas.update()
+                k_prev = coords[coords.index(k) - 1]
+            else:
+                canvas.moveto(player, x_0, h)
+                messagebox.showwarning(message='Вы проиграли!')
+                break
+            if abs(canvas.coords(player)[0] - canvas.coords(win_star)[0]) < grid_size / 2 and abs(canvas.coords(player)[1] - canvas.coords(win_star)[1]) < grid_size / 2:
+                canvas.moveto(player, canvas.coords(win_star)[0] - 54, canvas.coords(win_star)[1] - 54)
+                canvas.moveto(win_star, -50, -50)
+                star_count += 1
+                messagebox.showinfo(message='Вы победили!')
+                break
             canvas.update()
             sleep(0.01 ** 2)
+    print(canvas.coords(player))
+    #trajectory_ready = True
 
 
 def buttons_state():
-    if trajectory_ready:
+    if start_ready:
         main_button.configure(state=NORMAL)
     else:
         main_button.configure(state=DISABLED)
@@ -58,29 +84,19 @@ def get_user_data():
     return entry1.get()
 
 
-def calculate_trajectory(height, angle, velocity):
+def calculate_trajectory(height, angle, velocity, x_0, t_0):
     global player_lose, trajectory
     correct_coords = []
     t = 0
     vx = round(mh.cos(mh.radians(angle)), 5) * velocity
     vy0 = round(mh.sin(mh.radians(angle)), 5) * velocity
     g = 10
-    tend = (vy0 + mh.sqrt(vy0 ** 2 + 2 * g * height)) / g
+    tend = 2*t_0
     while t <= tend:
         t += 0.01
-        x = vx * t
+        x = x_0 + vx * t
         y = height - vy0 * t + ((g * t ** 2) / 2)
-        if 0 <= x <= n - grid_size * 0.5 and y <= m - grid_size * 0.5:
-            correct_coords.append((x, y))
-        else:
-            correct_coords.append((x, y))
-            player_lose = True
-            break
-    trajectory = canvas.create_line([(h[0] + grid_size / 2, h[1] + grid_size / 2) for h in correct_coords],
-                                    fill='red',
-                                    width=2,
-                                    smooth=True,
-                                    state=traj_state)
+        correct_coords.append((x, y))
     return correct_coords
 
 
@@ -90,7 +106,8 @@ def create_level():
         randrange(0, n // 2 - 2 * grid_size, grid_size) - 1, randrange(m // 2, m - grid_size, grid_size) - 8)
     canvas.moveto(start_brick, *start_brick_pos)
     fin_brick_pos = (
-        randrange(n // 2, n - 3 * grid_size, grid_size) + 4, randrange(2*grid_size, m // 2 - grid_size, grid_size) - 1)
+        randrange(n // 2, n - 3 * grid_size, grid_size) + 4,
+        randrange(2 * grid_size, m // 2 - grid_size, grid_size) - 1)
     canvas.moveto(fin_brick, *fin_brick_pos)
     win_star_pos = (fin_brick_pos[0] + grid_size, fin_brick_pos[1] - 2 * grid_size)
     canvas.moveto(win_star, *win_star_pos)
@@ -98,10 +115,11 @@ def create_level():
 
 def start_sequence():
     global x_axis, y_axis
-    global trajectory_ready, player
+    global start_ready, player
+    global s_y, s_x, x1, y1
     canvas.delete(x_axis)
     canvas.delete(y_axis)
-    trajectory_ready = True
+    start_ready = True
     buttons_state()
     create_level()
     x1, y1 = start_brick_pos
@@ -117,8 +135,11 @@ def start_sequence():
                                 )
     canvas.moveto(player, x1, y1)
     canvas.lift(player)
+    text1.configure(state='normal')
     text1.delete('1.0', END)
-    text1.insert('1.0', question_text1)
+    s_y = y1 + 40 - (win_star_pos[1] + 32)
+    s_x = win_star_pos[0] + 32 - (x1 + 50)
+    text1.insert('1.0', question_text1 + f'H = {s_y}м, L = {s_x}, угол = 60гр., t = 10с')
     text1.configure(state='disabled')
 
 
@@ -145,7 +166,7 @@ for y in range(0, m, grid_size):
                        )
 
 # player = canvas.create_oval(0, 0, grid_size, grid_size, fill='ORANGE')
-player = canvas.create_image(10, 10, image=player_png)
+player = canvas.create_image(10, 10, image=player_png, anchor=CENTER)
 canvas.moveto(player, -100, -100)
 start_brick = canvas.create_rectangle(0, 0, 4 * grid_size, grid_size, fill='#bf6d40')
 canvas.moveto(start_brick, -100, -100)
